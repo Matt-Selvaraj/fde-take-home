@@ -1,6 +1,6 @@
 import datetime
-import polars as pl
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import settings
@@ -10,6 +10,7 @@ from app.processor import process_data
 from app.storage import read_parquet
 
 router = APIRouter()
+
 
 class RunRequest(BaseModel):
     source_uri: str

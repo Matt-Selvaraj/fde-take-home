@@ -1,4 +1,3 @@
-from datetime import timedelta
 from typing import List, Dict, Any, Tuple
 
 import polars as pl
@@ -40,7 +39,7 @@ def process_data(df: pl.DataFrame, target_month: str, arr_threshold: int) -> Tup
     # 3. Calculate duration for each account
     # We need to look back at history for relevant accounts
     relevant_account_ids = target_df["account_id"].unique()
-    
+
     # Filter full df for relevant accounts and months up to target_month
     history_df = df.filter(
         (pl.col("account_id").is_in(relevant_account_ids)) &
@@ -48,12 +47,12 @@ def process_data(df: pl.DataFrame, target_month: str, arr_threshold: int) -> Tup
     ).sort(["account_id", "month_dt"], descending=[False, True])
 
     alerts = []
-    
+
     # Process each account in target_df
     # We can group by account_id in history_df to compute duration more efficiently
     # but since we need to iterate over target_df rows to build alerts anyway, 
     # let's find a balance.
-    
+
     # Group by account_id and collect status and month_dt as lists
     history_grouped = history_df.group_by("account_id").agg([
         pl.col("status").alias("statuses"),
@@ -69,11 +68,11 @@ def process_data(df: pl.DataFrame, target_month: str, arr_threshold: int) -> Tup
     for row in target_df.to_dicts():
         account_id = row["account_id"]
         statuses, months = history_dict.get(account_id, ([], []))
-        
+
         duration = 0
         current_expected_month = target_month_dt
         risk_start_month = target_month_dt
-        
+
         for status, month in zip(statuses, months):
             if month == current_expected_month:
                 if status == "At Risk":
@@ -81,7 +80,8 @@ def process_data(df: pl.DataFrame, target_month: str, arr_threshold: int) -> Tup
                     risk_start_month = month
                     # Move to previous month
                     if current_expected_month.month == 1:
-                        current_expected_month = current_expected_month.replace(year=current_expected_month.year - 1, month=12)
+                        current_expected_month = current_expected_month.replace(year=current_expected_month.year - 1,
+                                                                                month=12)
                     else:
                         current_expected_month = current_expected_month.replace(month=current_expected_month.month - 1)
                 else:
@@ -90,7 +90,7 @@ def process_data(df: pl.DataFrame, target_month: str, arr_threshold: int) -> Tup
                 continue
             else:
                 break
-        
+
         alerts.append({
             "account_id": str(account_id),
             "account_name": str(row["account_name"]),
@@ -104,5 +104,6 @@ def process_data(df: pl.DataFrame, target_month: str, arr_threshold: int) -> Tup
         })
 
     return alerts, duplicates_found
+
 
 from datetime import datetime
