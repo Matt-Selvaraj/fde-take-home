@@ -9,7 +9,8 @@ from app.notifier import format_alert_message, post_to_slack, send_aggregated_re
 from app.risk_analyzer import identify_at_risk_accounts
 from app.storage import read_parquet
 
-async def _handle_replay(db: Session, account_id: str, month: str, run_db_obj: Run) -> bool:
+
+async def check_for_duplicate(db: Session, account_id: str, month: str, run_db_obj: Run) -> bool:
     """
     Checks if an alert for this account/month has already been sent.
     Returns True if it's a replay and should be skipped.
@@ -26,7 +27,9 @@ async def _handle_replay(db: Session, account_id: str, month: str, run_db_obj: R
 
     return False
 
-async def _record_unknown_region(db: Session, account_id: str, month: str, alert_data: Dict[str, Any], unknown_region_alerts: List[Dict[str, Any]]):
+
+async def _record_unknown_region(db: Session, account_id: str, month: str, alert_data: Dict[str, Any],
+                                 unknown_region_alerts: List[Dict[str, Any]]):
     """Records an unknown region outcome and adds to the aggregated list."""
     existing_outcome = db.query(AlertOutcome).filter(
         AlertOutcome.account_id == account_id,
@@ -45,7 +48,9 @@ async def _record_unknown_region(db: Session, account_id: str, month: str, alert
         db.add(outcome)
     unknown_region_alerts.append(alert_data)
 
-async def _send_and_record_alert(db: Session, account_id: str, month: str, channel: str, alert_data: Dict[str, Any], run_db_obj: Run):
+
+async def _send_and_record_alert(db: Session, account_id: str, month: str, channel: str, alert_data: Dict[str, Any],
+                                 run_db_obj: Run):
     """Sends a Slack alert and records the outcome in the database."""
     message = format_alert_message(alert_data)
     error = await post_to_slack(channel, message)
@@ -79,17 +84,18 @@ async def _send_and_record_alert(db: Session, account_id: str, month: str, chann
         )
         db.add(outcome)
 
+
 async def _process_alerts(db: Session, alerts: List[Dict[str, Any]], month: str, dry_run: bool, run_db_obj: Run):
     """Processes each alert, handles replays, and sends notifications."""
     unknown_region_alerts = []
-    
+
     for alert_data in alerts:
         account_id = alert_data['account_id']
         region = alert_data['account_region']
         channel = settings.regions.get(region) if region else None
 
         # Check for replay
-        if await _handle_replay(db, account_id, month, run_db_obj):
+        if await check_for_duplicate(db, account_id, month, run_db_obj):
             continue
 
         if dry_run:
@@ -107,6 +113,7 @@ async def _process_alerts(db: Session, alerts: List[Dict[str, Any]], month: str,
     if not dry_run:
         await send_aggregated_report(unknown_region_alerts)
 
+
 async def run_risk_alert_pipeline(source_uri: str, month: str, dry_run: bool, run_db_obj: Run):
     """
     Orchestrates the data processing and alerting.
@@ -115,7 +122,6 @@ async def run_risk_alert_pipeline(source_uri: str, month: str, dry_run: bool, ru
     """
     db = SessionLocal()
     try:
-        # 1. Read Parquet
         df = read_parquet(source_uri)
 
         run_db_obj.rows_scanned = len(df)

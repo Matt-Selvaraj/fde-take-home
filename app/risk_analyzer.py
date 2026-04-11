@@ -1,9 +1,11 @@
+from datetime import datetime
 from typing import List, Dict, Any, Tuple
 
 import polars as pl
 
 
-def identify_at_risk_accounts(df: pl.DataFrame, target_month: str, arr_threshold: int) -> Tuple[List[Dict[str, Any]], int]:
+def identify_at_risk_accounts(df: pl.DataFrame, target_month: str, arr_threshold: int) -> Tuple[
+    List[Dict[str, Any]], int]:
     """
     Processes the dataframe to identify 'At Risk' accounts and compute duration.
     - target_month: 'YYYY-MM-01'
@@ -104,6 +106,3 @@ def identify_at_risk_accounts(df: pl.DataFrame, target_month: str, arr_threshold
         })
 
     return alerts, duplicates_found
-
-
-from datetime import datetime
