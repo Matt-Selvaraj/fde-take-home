@@ -39,13 +39,14 @@ def create_run(req: RunRequest, background_tasks: BackgroundTasks):
 
     try:
         alerts = run_risk_alert_pipeline(req.source_uri, req.month, req.dry_run, run_obj)
-
-        # After data processing, we update the run_obj in the main DB session
         db.merge(run_obj)
-        db.commit()
 
-        # Add alerting to background tasks
-        background_tasks.add_task(send_alerts, alerts, req.month, req.dry_run, run_obj)
+        if not req.dry_run:
+            background_tasks.add_task(send_alerts, alerts, req.month, req.dry_run, run_obj)
+        else:
+            run_obj.status = "succeeded"
+
+        db.commit()
     except Exception as e:
         # If run_risk_alert_pipeline fails, it already updated the status to failed in its own SessionLocal
         # and re-raised the exception. We just need to make sure we don't return success.
@@ -81,7 +82,7 @@ def get_run(run_id: str):
 
 
 @router.post("/preview")
-async def preview(req: RunRequest):
+def preview(req: RunRequest):
     try:
         df = read_parquet(req.source_uri)
 

@@ -100,16 +100,15 @@ async def _process_alert(db: Session, alert_data: Dict[str, Any], month: str, dr
     str, Any] | None:
     """Processes a single alert, handles replays, and sends notifications.
     Returns alert_data if it's an unknown region alert, else None."""
+    if dry_run:
+        return None
+
     account_id = alert_data['account_id']
     channel = _get_alert_channel(alert_data)
 
     # Check for replay
     is_duplicate = await _check_for_duplicate(db, account_id, month, run_db_obj)
     if is_duplicate:
-        return None
-
-    if dry_run:
-        run_db_obj.alerts_sent += 1
         return None
 
     if not channel:
