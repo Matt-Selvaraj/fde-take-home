@@ -3,7 +3,6 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.db import Run, SessionLocal
-from app.notifier import send_aggregated_report
 from app.risk_analyzer import identify_at_risk_accounts
 from app.risk_pipeline import run_risk_alert_pipeline
 from app.storage import read_parquet
@@ -38,8 +37,6 @@ async def create_run(req: RunRequest):
     db.commit()
     db.refresh(run_obj)
 
-    # Requirement: "Processes the run synchronously"
-    # "The request blocks until processing is complete"
     await run_risk_alert_pipeline(req.source_uri, req.month, req.dry_run, run_obj)
 
     run_id = run_obj.id
@@ -72,7 +69,6 @@ def get_run(run_id: str):
 
 @router.post("/preview")
 async def preview(req: RunRequest):
-    # Preview logic: Just process and return alerts, no DB persistence or Slack
     try:
         df = read_parquet(req.source_uri)
 
