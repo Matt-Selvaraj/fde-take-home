@@ -1,10 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
 from app.config import settings
 from app.db import Run, SessionLocal
 from app.risk_analyzer import identify_at_risk_accounts
-from app.risk_pipeline import run_risk_alert_pipeline
+from app.risk_pipeline import run_risk_alert_pipeline, send_alerts
 from app.storage import read_parquet
 
 router = APIRouter()
@@ -26,7 +26,7 @@ def health():
 
 
 @router.post("/runs", response_model=RunResponse)
-async def create_run(req: RunRequest):
+def create_run(req: RunRequest, background_tasks: BackgroundTasks):
     db = SessionLocal()
     run_obj = Run(
         month=req.month,
@@ -37,7 +37,20 @@ async def create_run(req: RunRequest):
     db.commit()
     db.refresh(run_obj)
 
-    await run_risk_alert_pipeline(req.source_uri, req.month, req.dry_run, run_obj)
+    try:
+        alerts = run_risk_alert_pipeline(req.source_uri, req.month, req.dry_run, run_obj)
+
+        # After data processing, we update the run_obj in the main DB session
+        db.merge(run_obj)
+        db.commit()
+
+        # Add alerting to background tasks
+        background_tasks.add_task(send_alerts, alerts, req.month, req.dry_run, run_obj)
+    except Exception as e:
+        # If run_risk_alert_pipeline fails, it already updated the status to failed in its own SessionLocal
+        # and re-raised the exception. We just need to make sure we don't return success.
+        db.close()
+        raise HTTPException(status_code=500, detail=str(e))
 
     run_id = run_obj.id
     db.close()

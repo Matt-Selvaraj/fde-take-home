@@ -121,11 +121,10 @@ async def _process_alert(db: Session, alert_data: Dict[str, Any], month: str, dr
     return None
 
 
-async def run_risk_alert_pipeline(source_uri: str, month: str, dry_run: bool, run_db_obj: Run):
+def run_risk_alert_pipeline(source_uri: str, month: str, dry_run: bool, run_db_obj: Run):
     """
-    Orchestrates the data processing and alerting.
+    Orchestrates the data processing.
     """
-    db = SessionLocal()
     try:
         df = read_parquet(source_uri)
 
@@ -134,6 +133,23 @@ async def run_risk_alert_pipeline(source_uri: str, month: str, dry_run: bool, ru
         alerts, duplicates_found = identify_at_risk_accounts(df, month, settings.ARR_THRESHOLD)
         run_db_obj.duplicates_found = duplicates_found
 
+        return alerts
+    except Exception as e:
+        db = SessionLocal()
+        run_db_obj.status = "failed"
+        run_db_obj.errors.append(str(e))
+        db.merge(run_db_obj)
+        db.commit()
+        db.close()
+        raise e
+
+
+async def send_alerts(alerts: list, month: str, dry_run: bool, run_db_obj: Run):
+    """
+    Orchestrates the alerting.
+    """
+    db = SessionLocal()
+    try:
         unknown_region_alerts = []
         for alert_data in alerts:
             result = await _process_alert(db, alert_data, month, dry_run, run_db_obj)
