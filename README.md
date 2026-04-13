@@ -127,8 +127,7 @@ Retrieve status and statistics of a run.
     "rows_scanned": 1250,
     "alerts_sent": 42,
     "skipped_replay": 5,
-    "failed_deliveries": 0,
-    "duplicates_found": 12
+    "failed_deliveries": 0
   },
   "errors": [],
   "created_at": "2026-04-12T18:30:00Z"
@@ -144,7 +143,6 @@ Returns potential alerts without sending Slack messages or persisting outcomes.
 {
   "month": "2026-01-01",
   "alerts_found": 2,
-  "duplicates_found": 0,
   "alerts": [
     {
       "account_id": "ACC123",
@@ -176,7 +174,7 @@ API -> Storage: Read Parquet (via fsspec)
 Storage -> API: Dataframe
 API -> Processor: identify_at_risk_accounts(df)
 Processor -> API: List of Alerts
-API -> DB: Update Run (rows_scanned, duplicates_found)
+API -> DB: Update Run (rows_scanned)
 API -> Client: 200 OK {run_id} (Alerting starts in background)
 
 Background -> Notifier: send_alerts(alerts)
@@ -196,3 +194,6 @@ Notifier -> DB: Update Run (status: succeeded/failed)
     - The endpoint should immediately return a `202 Accepted` status with the `run_id`.
     - All processing (data loading, analysis, and alerting) should be moved to background tasks (e.g., FastAPI `BackgroundTasks` or a dedicated worker like Celery).
     - Clients should poll the `GET /runs/{run_id}` endpoint to monitor progress and retrieve the final results.
+
+3. **Removal of `duplicates_found` for Scale Awareness**: Previously, the service attempted to count the number of duplicate rows resolved during processing. However, because we use `polars` LazyFrames to maintain scale awareness, calculating an exact count of duplicates required "collecting" (materializing) the entire dataset into memory. This defeated the purpose of using lazy evaluation. We have removed this metric to ensure the pipeline remains memory-efficient and only materializes data that is strictly necessary for the target month and its immediate history.
+4. **Handling of `Churned` status**: The dataset contains a `Churned` status in addition to `Healthy` and `At Risk`. Should the service implement specific logic or alerts for accounts that have already churned, or should they be excluded from the "At Risk" identification pipeline?

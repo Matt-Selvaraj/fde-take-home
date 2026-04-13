@@ -131,8 +131,7 @@ def run_risk_alert_pipeline(source_uri: str, month: str, dry_run: bool, run_db_o
         # Let's skip it or set to 0 to keep it scale-aware.
         run_db_obj.rows_scanned = 0
 
-        alerts, duplicates_found = identify_at_risk_accounts(df, month, settings.ARR_THRESHOLD)
-        run_db_obj.duplicates_found = duplicates_found
+        alerts = identify_at_risk_accounts(df, month, settings.ARR_THRESHOLD)
 
         return alerts
     except Exception as e:

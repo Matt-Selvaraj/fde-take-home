@@ -14,13 +14,11 @@ def _prepare_dataframe(df: pl.LazyFrame) -> pl.LazyFrame:
     return df
 
 
-def _resolve_duplicates(df: pl.LazyFrame) -> Tuple[pl.LazyFrame, int]:
+def _resolve_duplicates(df: pl.LazyFrame) -> pl.LazyFrame:
     """
     Returns a LazyFrame that will resolve duplicates when collected.
-    Since we can't easily count duplicates without collecting, 
-    we return 0 as the count for scale awareness.
     """
-    return df.sort("updated_at", descending=True).unique(subset=["account_id", "month"], keep="first"), 0
+    return df.sort("updated_at", descending=True).unique(subset=["account_id", "month"], keep="first")
 
 
 
@@ -73,25 +71,24 @@ def _format_alerts(df: pl.DataFrame, target_month: str) -> List[Dict[str, Any]]:
     return alerts
 
 
-def identify_at_risk_accounts(df: pl.LazyFrame, target_month: str, arr_threshold: int) -> Tuple[
-    List[Dict[str, Any]], int]:
+def identify_at_risk_accounts(df: pl.LazyFrame, target_month: str, arr_threshold: int) -> List[Dict[str, Any]]:
     """
     Processes the dataframe to identify 'At Risk' accounts and compute duration.
     - target_month: 'YYYY-MM-01'
     - arr_threshold: Minimum ARR to alert
-    Returns a list of alert details and the number of duplicates resolved.
+    Returns a list of alert details.
     """
     target_month_dt = datetime.strptime(target_month, "%Y-%m-%d").date()
     
     # 1. Resolve duplicates for all data lazily
     df = _prepare_dataframe(df)
-    df, _ = _resolve_duplicates(df)
+    df = _resolve_duplicates(df)
     
     # 2. Filter for target month first to get candidates
     target_df = _get_target_month_candidates(df, target_month_dt, arr_threshold).collect()
 
     if target_df.is_empty():
-        return [], 0
+        return []
 
     # 3. Resolve history for relevant accounts only and calculate duration
     relevant_account_ids = target_df["account_id"].unique()
@@ -100,4 +97,4 @@ def identify_at_risk_accounts(df: pl.LazyFrame, target_month: str, arr_threshold
     # 4. Join stats back and prepare alerts
     final_results = target_df.join(history_stats, on="account_id", how="left")
 
-    return _format_alerts(final_results, target_month), 0
+    return _format_alerts(final_results, target_month)

@@ -74,8 +74,7 @@ def get_run(run_id: str):
             "rows_scanned": run.rows_scanned,
             "alerts_sent": run.alerts_sent,
             "skipped_replay": run.skipped_replay,
-            "failed_deliveries": run.failed_deliveries,
-            "duplicates_found": run.duplicates_found
+            "failed_deliveries": run.failed_deliveries
         },
         "errors": run.errors[:10],  # Sample errors
         "created_at": run.created_at
@@ -87,12 +86,11 @@ def preview(req: RunRequest):
     try:
         df = scan_parquet(req.source_uri)
 
-        alerts, duplicates_found = identify_at_risk_accounts(df, req.month, settings.ARR_THRESHOLD)
+        alerts = identify_at_risk_accounts(df, req.month, settings.ARR_THRESHOLD)
 
         return {
             "month": req.month,
             "alerts_found": len(alerts),
-            "duplicates_found": duplicates_found,
             "alerts": alerts
         }
     except Exception as e:

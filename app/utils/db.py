@@ -19,7 +19,6 @@ class Run(Base):
     alerts_sent = Column(Integer, default=0)
     skipped_replay = Column(Integer, default=0)
     failed_deliveries = Column(Integer, default=0)
-    duplicates_found = Column(Integer, default=0)
     errors = Column(JSON, default=list)
     created_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
 
