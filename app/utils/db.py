@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import create_engine, Column, String, Integer, DateTime, JSON, UniqueConstraint
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-from app.config import settings
+from app.utils.config import settings
 
 Base = declarative_base()
 

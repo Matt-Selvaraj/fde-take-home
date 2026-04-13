@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
-from app.config import settings
-from app.db import Run, SessionLocal
-from app.risk_analyzer import identify_at_risk_accounts
-from app.risk_pipeline import run_risk_alert_pipeline, send_alerts
-from app.storage import read_parquet
+from app.utils.config import settings
+from app.utils.db import Run, SessionLocal
+from app.risk_logic.identify_at_risk_accounts import identify_at_risk_accounts
+from app.risk_logic.risk_pipeline import run_risk_alert_pipeline, send_alerts
+from app.utils.storage import scan_parquet
 
 router = APIRouter()
 
@@ -26,7 +26,7 @@ def health():
 
 
 @router.post("/runs", response_model=RunResponse)
-def create_run(req: RunRequest, background_tasks: BackgroundTasks):
+async def create_run(req: RunRequest):
     db = SessionLocal()
     run_obj = Run(
         month=req.month,
@@ -42,7 +42,8 @@ def create_run(req: RunRequest, background_tasks: BackgroundTasks):
         db.merge(run_obj)
 
         if not req.dry_run:
-            background_tasks.add_task(send_alerts, alerts, req.month, req.dry_run, run_obj)
+            # Requirements say /runs must process the run synchronously and block until complete
+            await send_alerts(alerts, req.month, req.dry_run, run_obj)
         else:
             run_obj.status = "succeeded"
 
@@ -84,7 +85,7 @@ def get_run(run_id: str):
 @router.post("/preview")
 def preview(req: RunRequest):
     try:
-        df = read_parquet(req.source_uri)
+        df = scan_parquet(req.source_uri)
 
         alerts, duplicates_found = identify_at_risk_accounts(df, req.month, settings.ARR_THRESHOLD)
 

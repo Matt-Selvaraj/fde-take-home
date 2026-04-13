@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 
 import aiohttp
 
-from app.config import settings
+from app.utils.config import settings
 
 logger = logging.getLogger(__name__)
 

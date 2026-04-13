@@ -1,7 +1,7 @@
 import logging
 from typing import List, Dict, Any
 
-from app.config import settings
+from app.utils.config import settings
 
 logger = logging.getLogger(__name__)
 

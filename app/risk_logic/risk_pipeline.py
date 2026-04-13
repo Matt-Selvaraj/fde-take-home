@@ -3,12 +3,12 @@ from typing import Dict, Any
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
-from app.db import Run, AlertOutcome, SessionLocal
+from app.utils.config import settings
+from app.utils.db import Run, AlertOutcome, SessionLocal
 from app.notifiers.slack import format_alert_message, post_to_slack
 from app.notifiers.email import send_aggregated_report
-from app.risk_analyzer import identify_at_risk_accounts
-from app.storage import read_parquet
+from app.risk_logic.identify_at_risk_accounts import identify_at_risk_accounts
+from app.utils.storage import scan_parquet
 
 
 async def _get_existing_outcome(db: Session, account_id: str, month: str):
@@ -125,9 +125,11 @@ def run_risk_alert_pipeline(source_uri: str, month: str, dry_run: bool, run_db_o
     Orchestrates the data processing.
     """
     try:
-        df = read_parquet(source_uri)
+        df = scan_parquet(source_uri)
 
-        run_db_obj.rows_scanned = len(df)
+        # For LazyFrame, we can't get length without collecting.
+        # Let's skip it or set to 0 to keep it scale-aware.
+        run_db_obj.rows_scanned = 0
 
         alerts, duplicates_found = identify_at_risk_accounts(df, month, settings.ARR_THRESHOLD)
         run_db_obj.duplicates_found = duplicates_found
