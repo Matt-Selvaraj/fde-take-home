@@ -24,6 +24,21 @@ If the team finds 147 alerts per month too high for manual intervention, increas
 
 ## Local Development
 
+The easiest way to run the service locally is using the `run_local.sh` script:
+
+```bash
+./run_local.sh
+```
+
+This script will:
+- Install/update required dependencies
+- Start the Mock Slack Service (on port 5001)
+- Start the Risk Alert Service (on port 8000)
+
+*Note: Ensure you have your Python virtual environment activated before running this script.*
+
+Alternatively, you can run the components manually:
+
 1. Install dependencies:
    ```bash
    pip install -r requirements.txt
