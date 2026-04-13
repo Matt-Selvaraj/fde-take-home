@@ -36,15 +36,21 @@ def _get_historical_risk_stats(df: pl.LazyFrame, account_ids: Any, target_month_
     """Calculates consecutive At Risk months and the risk start month for given accounts."""
     return df.filter(
         pl.col("account_id").is_in(account_ids) & (pl.col("month_dt") <= target_month_dt)
-    ).with_columns(
-        is_at_risk=pl.col("status") == "At Risk"
     ).sort(
         ["account_id", "month_dt"], descending=[False, True]
     ).with_columns(
-        # For each account, find the first month that is NOT At Risk (looking backwards from target)
-        # We use cum_sum on (~is_at_risk) to identify the streak.
-        # Any row where cum_sum > 0 is after (in time) the first Healthy month.
-        streak_id=pl.col("is_at_risk").not_().cum_sum().over("account_id")
+        is_at_risk=pl.col("status") == "At Risk",
+        next_month_dt=pl.col("month_dt").shift(1).over("account_id")
+    ).with_columns(
+        is_break=(
+            pl.col("is_at_risk").not_() |
+            (
+                pl.col("next_month_dt").is_not_null() &
+                (pl.col("next_month_dt") != (pl.col("month_dt") + pl.duration(days=32)).dt.month_start())
+            )
+        )
+    ).with_columns(
+        streak_id=pl.col("is_break").cum_sum().over("account_id")
     ).filter(
         pl.col("streak_id") == 0
     ).group_by("account_id").agg([
