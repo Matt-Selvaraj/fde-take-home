@@ -25,6 +25,54 @@ def _resolve_duplicates(df: pl.LazyFrame) -> Tuple[pl.LazyFrame, int]:
 
 
 
+def _get_target_month_candidates(df: pl.LazyFrame, target_month_dt: date, arr_threshold: int) -> pl.LazyFrame:
+    """Filters for At Risk accounts in target month with ARR >= threshold."""
+    return df.filter(
+        (pl.col("month_dt") == target_month_dt) &
+        (pl.col("status") == "At Risk") &
+        (pl.col("arr") >= arr_threshold)
+    )
+
+
+def _get_historical_risk_stats(df: pl.LazyFrame, account_ids: Any, target_month_dt: date) -> pl.LazyFrame:
+    """Calculates consecutive At Risk months and the risk start month for given accounts."""
+    return df.filter(
+        pl.col("account_id").is_in(account_ids) & (pl.col("month_dt") <= target_month_dt)
+    ).with_columns(
+        is_at_risk=pl.col("status") == "At Risk"
+    ).sort(
+        ["account_id", "month_dt"], descending=[False, True]
+    ).with_columns(
+        # For each account, find the first month that is NOT At Risk (looking backwards from target)
+        # We use cum_sum on (~is_at_risk) to identify the streak.
+        # Any row where cum_sum > 0 is after (in time) the first Healthy month.
+        streak_id=pl.col("is_at_risk").not_().cum_sum().over("account_id")
+    ).filter(
+        pl.col("streak_id") == 0
+    ).group_by("account_id").agg([
+        pl.len().alias("duration_months"),
+        pl.col("month_dt").min().alias("risk_start_month")
+    ])
+
+
+def _format_alerts(df: pl.DataFrame, target_month: str) -> List[Dict[str, Any]]:
+    """Formats the joined results into a list of alert dictionaries."""
+    alerts = []
+    for row in df.to_dicts():
+        alerts.append({
+            "account_id": str(row["account_id"]),
+            "account_name": str(row["account_name"]),
+            "account_region": row.get("account_region"),
+            "month": target_month,
+            "duration_months": int(row["duration_months"]) if row["duration_months"] is not None else 0,
+            "risk_start_month": row["risk_start_month"].strftime("%Y-%m-01") if row["risk_start_month"] else target_month,
+            "arr": row.get("arr"),
+            "renewal_date": str(row["renewal_date"]) if row.get("renewal_date") else None,
+            "account_owner": row.get("account_owner")
+        })
+    return alerts
+
+
 def identify_at_risk_accounts(df: pl.LazyFrame, target_month: str, arr_threshold: int) -> Tuple[
     List[Dict[str, Any]], int]:
     """
@@ -40,51 +88,16 @@ def identify_at_risk_accounts(df: pl.LazyFrame, target_month: str, arr_threshold
     df, _ = _resolve_duplicates(df)
     
     # 2. Filter for target month first to get candidates
-    target_df = df.filter(
-        (pl.col("month_dt") == target_month_dt) &
-        (pl.col("status") == "At Risk") &
-        (pl.col("arr") >= arr_threshold)
-    ).collect()
+    target_df = _get_target_month_candidates(df, target_month_dt, arr_threshold).collect()
 
     if target_df.is_empty():
         return [], 0
 
     # 3. Resolve history for relevant accounts only and calculate duration
     relevant_account_ids = target_df["account_id"].unique()
-    
-    history_stats = df.filter(
-        pl.col("account_id").is_in(relevant_account_ids) & (pl.col("month_dt") <= target_month_dt)
-    ).with_columns(
-        is_at_risk=pl.col("status") == "At Risk"
-    ).sort(
-        ["account_id", "month_dt"], descending=[False, True]
-    ).with_columns(
-        # For each account, find the first month that is NOT At Risk (looking backwards from target)
-        # We use cum_sum on (~is_at_risk) to identify the streak.
-        # Any row where cum_sum > 0 is before (in time) the first Healthy month.
-        streak_id=pl.col("is_at_risk").not_().cum_sum().over("account_id")
-    ).filter(
-        pl.col("streak_id") == 0
-    ).group_by("account_id").agg([
-        pl.len().alias("duration_months"),
-        pl.col("month_dt").min().alias("risk_start_month")
-    ]).collect()
+    history_stats = _get_historical_risk_stats(df, relevant_account_ids, target_month_dt).collect()
     
     # 4. Join stats back and prepare alerts
     final_results = target_df.join(history_stats, on="account_id", how="left")
 
-    alerts = []
-    for row in final_results.to_dicts():
-        alerts.append({
-            "account_id": str(row["account_id"]),
-            "account_name": str(row["account_name"]),
-            "account_region": row.get("account_region"),
-            "month": target_month,
-            "duration_months": int(row["duration_months"]) if row["duration_months"] is not None else 0,
-            "risk_start_month": row["risk_start_month"].strftime("%Y-%m-01") if row["risk_start_month"] else target_month,
-            "arr": row.get("arr"),
-            "renewal_date": str(row["renewal_date"]) if row.get("renewal_date") else None,
-            "account_owner": row.get("account_owner")
-        })
-
-    return alerts, 0 # placeholder for duplicates if strictly required
+    return _format_alerts(final_results, target_month), 0
