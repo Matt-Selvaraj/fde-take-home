@@ -208,6 +208,8 @@ Returns potential alerts without starting a run, sending Slack messages, or pers
 
 ### Sequence Diagram
 
+More detailed diagramming can be found [here](https://lucid.app/lucidchart/050f6f9f-3b6f-4960-822e-0365f04b3249/edit?viewport_loc=27%2C-408%2C2789%2C1416%2CZGhOFdaouYA0&invitationId=inv_a20e1afc-e347-4e16-a2b9-0203eb00f83d).
+
 ```text
 Client -> API: POST /runs {uri, month}
 API -> DB: Create Run (status: processing)
