@@ -104,7 +104,7 @@ def test_get_alert_channel(mock_settings):
 async def test_process_alert_unknown_region(mock_post, db_session):
     run_obj = Run(failed_deliveries=0, errors=[])
     alert_data = {"account_id": "acc1", "account_region": None}  # No region -> unknown
-    result = await _process_alert(db_session, alert_data, "2023-01-01", False, run_obj)
+    result = await _process_alert(db_session, alert_data, "2023-01-01", run_obj)
     assert result == alert_data
     mock_post.assert_not_called()
     assert run_obj.failed_deliveries == 1

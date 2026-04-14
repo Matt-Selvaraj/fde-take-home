@@ -42,7 +42,7 @@ def create_run(req: RunRequest, background_tasks: BackgroundTasks):
         db.merge(run_obj)
 
         if not req.dry_run:
-            background_tasks.add_task(send_alerts, alerts, req.month, req.dry_run, run_obj)
+            background_tasks.add_task(send_alerts, alerts, req.month, run_obj)
         else:
             run_obj.status = "succeeded"
 

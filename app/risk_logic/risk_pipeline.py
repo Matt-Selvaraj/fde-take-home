@@ -97,13 +97,10 @@ def _get_alert_channel(alert_data: Dict[str, Any]) -> str | None:
     return settings.regions.get(region) if region else None
 
 
-async def _process_alert(db: Session, alert_data: Dict[str, Any], month: str, dry_run: bool, run_db_obj: Run) -> Dict[
-                                                                                                                     str, Any] | None:
+async def _process_alert(db: Session, alert_data: Dict[str, Any], month: str, run_db_obj: Run) -> Dict[
+                                                                                                      str, Any] | None:
     """Processes a single alert, handles replays, and sends notifications.
     Returns alert_data if it's an unknown region alert, else None."""
-    if dry_run:
-        return None
-
     account_id = alert_data['account_id']
     channel = _get_alert_channel(alert_data)
 
@@ -141,7 +138,7 @@ def run_risk_alert_pipeline(source_uri: str, month: str, run_db_obj: Run):
         raise e
 
 
-async def send_alerts(alerts: list, month: str, dry_run: bool, run_db_obj: Run):
+async def send_alerts(alerts: list, month: str, run_db_obj: Run):
     """
     Orchestrates the alerting.
     """
@@ -149,12 +146,11 @@ async def send_alerts(alerts: list, month: str, dry_run: bool, run_db_obj: Run):
     try:
         unknown_region_alerts = []
         for alert_data in alerts:
-            result = await _process_alert(db, alert_data, month, dry_run, run_db_obj)
+            result = await _process_alert(db, alert_data, month, run_db_obj)
             if result:
                 unknown_region_alerts.append(result)
 
-        if not dry_run:
-            await send_aggregated_report(unknown_region_alerts)
+        await send_aggregated_report(unknown_region_alerts)
 
         run_db_obj.status = "succeeded"
     except Exception as e:
