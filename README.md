@@ -70,9 +70,41 @@ Development dependencies for testing are listed in `requirements-development.txt
    uvicorn app.main:app --reload
    ```
 
-## Docker
+## Docker & Containerization
 
-Build and run the container:
+The easiest way to run the full stack (API + Mock Slack) is using the provided Docker Compose setup.
+
+### Using the Helper Script
+
+Run the `run_docker.sh` script to build and start all services in the background:
+
+```bash
+./run_docker.sh
+```
+
+This will:
+- Build the Docker images for both services.
+- Start the **Risk Alert API** on `http://localhost:8000`.
+- Start the **Mock Slack Service** on `http://localhost:5001`.
+
+### Using Docker Compose Directly
+
+Alternatively, you can use standard Docker Compose commands:
+
+```bash
+# Start all services
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop and remove containers
+docker compose down
+```
+
+### Manual Docker Build
+
+If you only need to build and run the Risk Alert Service container individually:
 
 ```bash
 docker build -t risk-alert-service .
