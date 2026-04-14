@@ -15,7 +15,6 @@ class Run(Base):
     status = Column(String)  # succeeded, failed
     month = Column(String)
     source_uri = Column(String)
-    rows_scanned = Column(Integer, default=0)
     alerts_sent = Column(Integer, default=0)
     skipped_replay = Column(Integer, default=0)
     failed_deliveries = Column(Integer, default=0)

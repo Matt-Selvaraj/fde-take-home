@@ -37,7 +37,23 @@ This script will:
 
 *Note: Ensure you have your Python virtual environment activated before running this script.*
 
-Alternatively, you can run the components manually:
+### Running Tests
+
+You can run the full test suite using the `run_tests.sh` script:
+
+```bash
+./run_tests.sh
+```
+
+Alternatively, you can run tests manually with `pytest`:
+
+```bash
+pytest
+```
+
+Development dependencies for testing are listed in `requirements-development.txt`.
+
+### Manual Component Setup
 
 1. Install dependencies:
    ```bash
@@ -92,12 +108,13 @@ The service supports two modes of Slack integration:
 
 ## Replay Safety & Idempotency
 
-To prevent duplicate alerts on re-runs:
-- **Alert Outcomes**: Every successful or failed alert is persisted in SQLite (`alert_outcomes` table).
+To prevent duplicate alerts:
+- **Alert Outcomes**: Every successful, failed, or skipped alert is persisted in SQLite (`alert_outcomes` table).
 - **Uniqueness**: Enforced on `(account_id, month, alert_type)`.
 - **Replay Behavior**: 
     - If an alert was already `sent`, it is skipped in subsequent runs (marked as `skipped_replay`).
     - If an alert `failed` previously, the system will attempt to retry it.
+    - `unknown_region` outcomes are recorded to prevent repetitive email reports if the region remains unknown.
 
 ## Error Handling & Support Notifications
 
@@ -109,9 +126,18 @@ If an account's region is missing or not mapped in `REGIONS_CONFIG`:
 
 ## API Usage
 
+### GET /health
+
+Simple health check to verify the service is running.
+
+**Response:**
+```json
+{"ok": true}
+```
+
 ### POST /runs
 
-Starts a run for a given month. Currently, Parquet processing is synchronous, while alerting is offloaded to background tasks.
+Starts a run for a given month. Parquet data processing (identifying at-risk accounts) is done synchronously, while the alerting process (Slack/Email) is offloaded to FastAPI `BackgroundTasks`.
 
 **Request:**
 ```json
@@ -139,7 +165,6 @@ Retrieve status and statistics of a run.
   "run_id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "succeeded",
   "counts": {
-    "rows_scanned": 1250,
     "alerts_sent": 42,
     "skipped_replay": 5,
     "failed_deliveries": 0
@@ -151,18 +176,19 @@ Retrieve status and statistics of a run.
 
 ### POST /preview
 
-Returns potential alerts without sending Slack messages or persisting outcomes.
+Returns potential alerts without starting a run, sending Slack messages, or persisting outcomes. This is useful for testing configurations and understanding the impact of threshold changes.
 
 **Response Example:**
 ```json
 {
   "month": "2026-01-01",
-  "alerts_found": 2,
+  "alerts_found": 1,
   "alerts": [
     {
       "account_id": "ACC123",
       "account_name": "Acme Corp",
       "account_region": "AMER",
+      "month": "2026-01-01",
       "duration_months": 3,
       "risk_start_month": "2025-11-01",
       "arr": 50000,
@@ -186,15 +212,12 @@ Returns potential alerts without sending Slack messages or persisting outcomes.
 Client -> API: POST /runs {uri, month}
 API -> DB: Create Run (status: processing)
 API -> Storage: Read Parquet (via fsspec)
-Storage -> API: Dataframe
 API -> Processor: identify_at_risk_accounts(df)
-Processor -> API: List of Alerts
-API -> DB: Update Run (rows_scanned)
-API -> Client: 200 OK {run_id} (Alerting starts in background)
+API -> Client: 200 OK {run_id} (Alerting starts in BackgroundTasks)
 
 Background -> Notifier: send_alerts(alerts)
-Notifier -> DB: Check for Replay
 loop For each alert
+    Notifier -> DB: Check for Replay
     Notifier -> Slack: POST Alert (with retries)
     Notifier -> DB: Record Alert Outcome
 end
@@ -204,11 +227,7 @@ Notifier -> DB: Update Run (status: succeeded/failed)
 
 ## Questions & Improvements
 
-1. **Redundancy of `/preview` endpoint**: The `/preview` endpoint currently duplicates much of the logic found in the `/runs` pipeline. A better approach would be to have `/runs` accept a `dry_run` flag (which it already does) and unify the underlying processing logic to avoid code duplication and ensure consistency between previews and actual runs.
-2. **Asynchronous Request-Reply Pattern**: The `POST /runs` endpoint currently performs Parquet processing synchronously (`run_risk_alert_pipeline`) before returning a response. For large datasets, this can lead to timeouts and poor client experience. To properly implement the Asynchronous Request-Reply Pattern:
-    - The endpoint should immediately return a `202 Accepted` status with the `run_id`.
-    - All processing (data loading, analysis, and alerting) should be moved to background tasks (e.g., FastAPI `BackgroundTasks` or a dedicated worker like Celery).
-    - Clients should poll the `GET /runs/{run_id}` endpoint to monitor progress and retrieve the final results.
-
-3. **Removal of `duplicates_found` for Scale Awareness**: Previously, the service attempted to count the number of duplicate rows resolved during processing. However, because we use `polars` LazyFrames to maintain scale awareness, calculating an exact count of duplicates required "collecting" (materializing) the entire dataset into memory. This defeated the purpose of using lazy evaluation. We have removed this metric to ensure the pipeline remains memory-efficient and only materializes data that is strictly necessary for the target month and its immediate history.
-4. **Handling of `Churned` status**: The dataset contains a `Churned` status in addition to `Healthy` and `At Risk`. Should the service implement specific logic or alerts for accounts that have already churned, or should they be excluded from the "At Risk" identification pipeline?
+1. **Complete Asynchronous Processing**: Currently, `POST /runs` identifies at-risk accounts synchronously. For very large datasets, this should be moved entirely into a background worker to avoid timing out the initial request.
+2. **Unified Pipeline**: Unify `/preview` and `/runs` logic further to reduce code duplication.
+3. **Enhanced Monitoring**: Add more granular metrics for the alerting phase (e.g. retry counts per alert).
+4. **Handling of `Churned` status**: The dataset contains a `Churned` status. Should the service implement specific logic or alerts for accounts that have already churned, or should they be excluded?

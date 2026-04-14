@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
-from app.utils.config import settings
-from app.utils.db import Run, SessionLocal
 from app.risk_logic.identify_at_risk_accounts import identify_at_risk_accounts
 from app.risk_logic.risk_pipeline import run_risk_alert_pipeline, send_alerts
+from app.utils.config import settings
+from app.utils.db import Run, SessionLocal
 from app.utils.storage import scan_parquet
 
 router = APIRouter()
@@ -26,7 +26,7 @@ def health():
 
 
 @router.post("/runs", response_model=RunResponse)
-async def create_run(req: RunRequest):
+def create_run(req: RunRequest, background_tasks: BackgroundTasks):
     db = SessionLocal()
     run_obj = Run(
         month=req.month,
@@ -38,12 +38,11 @@ async def create_run(req: RunRequest):
     db.refresh(run_obj)
 
     try:
-        alerts = run_risk_alert_pipeline(req.source_uri, req.month, req.dry_run, run_obj)
+        alerts = run_risk_alert_pipeline(req.source_uri, req.month, run_obj)
         db.merge(run_obj)
 
         if not req.dry_run:
-            # Requirements say /runs must process the run synchronously and block until complete
-            await send_alerts(alerts, req.month, req.dry_run, run_obj)
+            background_tasks.add_task(send_alerts, alerts, req.month, req.dry_run, run_obj)
         else:
             run_obj.status = "succeeded"
 
@@ -71,12 +70,11 @@ def get_run(run_id: str):
         "run_id": run.id,
         "status": run.status,
         "counts": {
-            "rows_scanned": run.rows_scanned,
             "alerts_sent": run.alerts_sent,
             "skipped_replay": run.skipped_replay,
             "failed_deliveries": run.failed_deliveries
         },
-        "errors": run.errors[:10],  # Sample errors
+        "errors": run.errors[:10],
         "created_at": run.created_at
     }
 

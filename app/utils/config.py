@@ -1,7 +1,7 @@
 import json
 from typing import Dict, Optional
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -17,8 +17,7 @@ class Settings(BaseSettings):
     def regions(self) -> Dict[str, str]:
         return json.loads(self.REGIONS_CONFIG)
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env")
 
 
 settings = Settings()

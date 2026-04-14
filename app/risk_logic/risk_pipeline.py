@@ -3,11 +3,11 @@ from typing import Dict, Any
 
 from sqlalchemy.orm import Session
 
+from app.notifiers.email import send_aggregated_report
+from app.notifiers.slack import format_alert_message, post_to_slack
+from app.risk_logic.identify_at_risk_accounts import identify_at_risk_accounts
 from app.utils.config import settings
 from app.utils.db import Run, AlertOutcome, SessionLocal
-from app.notifiers.slack import format_alert_message, post_to_slack
-from app.notifiers.email import send_aggregated_report
-from app.risk_logic.identify_at_risk_accounts import identify_at_risk_accounts
 from app.utils.storage import scan_parquet
 
 
@@ -97,7 +97,7 @@ def _get_alert_channel(alert_data: Dict[str, Any]) -> str | None:
 
 
 async def _process_alert(db: Session, alert_data: Dict[str, Any], month: str, dry_run: bool, run_db_obj: Run) -> Dict[
-    str, Any] | None:
+                                                                                                                     str, Any] | None:
     """Processes a single alert, handles replays, and sends notifications.
     Returns alert_data if it's an unknown region alert, else None."""
     if dry_run:
@@ -120,16 +120,12 @@ async def _process_alert(db: Session, alert_data: Dict[str, Any], month: str, dr
     return None
 
 
-def run_risk_alert_pipeline(source_uri: str, month: str, dry_run: bool, run_db_obj: Run):
+def run_risk_alert_pipeline(source_uri: str, month: str, run_db_obj: Run):
     """
     Orchestrates the data processing.
     """
     try:
         df = scan_parquet(source_uri)
-
-        # For LazyFrame, we can't get length without collecting.
-        # Let's skip it or set to 0 to keep it scale-aware.
-        run_db_obj.rows_scanned = 0
 
         alerts = identify_at_risk_accounts(df, month, settings.ARR_THRESHOLD)
 
