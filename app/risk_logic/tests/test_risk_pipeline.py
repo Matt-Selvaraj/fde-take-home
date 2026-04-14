@@ -57,10 +57,13 @@ async def test_check_for_duplicate_false(db_session):
 
 @pytest.mark.asyncio
 async def test_record_unknown_region(db_session):
-    await _record_unknown_region(db_session, "acc1", "2023-01-01")
+    run_obj = Run(failed_deliveries=0, errors=[])
+    await _record_unknown_region(run_obj, db_session, "acc1", "2023-01-01")
     outcome = db_session.query(AlertOutcome).filter_by(account_id="acc1").first()
     assert outcome is not None
-    assert outcome.status == "unknown_region"
+    assert outcome.status == "failed"
+    assert run_obj.failed_deliveries == 1
+    assert "Account acc1 Unknown Region Error" in run_obj.errors
 
 
 def test_update_run_stats_sent():
@@ -99,11 +102,12 @@ def test_get_alert_channel(mock_settings):
 @pytest.mark.asyncio
 @patch('app.risk_logic.risk_pipeline.post_to_slack', new_callable=AsyncMock)
 async def test_process_alert_unknown_region(mock_post, db_session):
-    run_obj = Run()
+    run_obj = Run(failed_deliveries=0, errors=[])
     alert_data = {"account_id": "acc1", "account_region": None}  # No region -> unknown
     result = await _process_alert(db_session, alert_data, "2023-01-01", False, run_obj)
     assert result == alert_data
     mock_post.assert_not_called()
+    assert run_obj.failed_deliveries == 1
 
 
 @patch('app.risk_logic.risk_pipeline.scan_parquet')

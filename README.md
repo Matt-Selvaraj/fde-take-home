@@ -231,3 +231,6 @@ Notifier -> DB: Update Run (status: succeeded/failed)
 2. **Unified Pipeline**: Unify `/preview` and `/runs` logic further to reduce code duplication.
 3. **Enhanced Monitoring**: Add more granular metrics for the alerting phase (e.g. retry counts per alert).
 4. **Handling of `Churned` status**: The dataset contains a `Churned` status. Should the service implement specific logic or alerts for accounts that have already churned, or should they be excluded?
+5. **Memory Performance & Scalability**:
+    - **Avoid Storing/Computing Duplicates**: The processor currently deduplicates data lazily using `LazyFrame.unique()`. While this is efficient, the number of **duplicates found is not stored** because it would require an extra `collect()` or count operation, which adds unnecessary overhead for the primary goal of identification. 
+    - **Rows Scanned Metrics**: Tracking `rows_scanned` and other data-level metrics are not currently implemented because the `Run` model in `app/utils/db.py` focuses exclusively on **alert outcomes** (sent, failed, skipped) rather than ingestion auditing. Adding these would help identify performance bottlenecks as the dataset grows, but would result in additional `collect()` operations.

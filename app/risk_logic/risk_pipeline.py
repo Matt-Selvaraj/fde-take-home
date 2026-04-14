@@ -34,15 +34,16 @@ async def _check_for_duplicate(db: Session, account_id: str, month: str, run_db_
     return False
 
 
-async def _record_unknown_region(db: Session, account_id: str, month: str):
+async def _record_unknown_region(run_db_obj: Run, db: Session, account_id: str, month: str):
     """Records an unknown region outcome."""
     existing_outcome = await _get_existing_outcome(db, account_id, month)
-
+    run_db_obj.failed_deliveries += 1
+    run_db_obj.errors.append(f"Account {account_id} Unknown Region Error")
     if not existing_outcome:
         outcome = AlertOutcome(
             account_id=account_id,
             month=month,
-            status="unknown_region",
+            status="failed",
             error="unknown_region",
             sent_at=datetime.datetime.now(datetime.timezone.utc)
         )
@@ -112,7 +113,7 @@ async def _process_alert(db: Session, alert_data: Dict[str, Any], month: str, dr
         return None
 
     if not channel:
-        await _record_unknown_region(db, account_id, month)
+        await _record_unknown_region(run_db_obj, db, account_id, month)
         return alert_data
 
     # Send to Slack and record outcome

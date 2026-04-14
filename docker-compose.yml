@@ -1,0 +1,20 @@
+services:
+  risk-alert-service:
+    build: .
+    container_name: risk-alert-service-container
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./risk_alerts.db
+      - SLACK_WEBHOOK_BASE_URL=http://mock-slack-service:5001/slack/webhook
+    depends_on:
+      - mock-slack-service
+
+  mock-slack-service:
+    build: .
+    container_name: mock-slack-service-container
+    ports:
+      - "5001:5001"
+    command: ["uvicorn", "mock_slack.server:app", "--host", "0.0.0.0", "--port", "5001"]
+    environment:
+      - MOCK_SLACK_LOG_PATH=/app/mock_slack_requests.jsonl
